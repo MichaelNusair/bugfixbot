@@ -146,6 +146,7 @@ export const runCycle = async (ctx: CycleContext): Promise<CycleResult> => {
 export type WatchOptions = {
   maxCycles?: number;
   pollIntervalMs?: number;
+  waitForComments?: boolean;
   onCycleComplete?: (result: CycleResult, cycleNumber: number) => void;
 };
 
@@ -157,6 +158,7 @@ export const runLoop = async (
   const {
     maxCycles = config.guardrails.maxCycles,
     pollIntervalMs = config.guardrails.pollIntervalMs,
+    waitForComments = false,
     onCycleComplete,
   } = options;
 
@@ -187,13 +189,25 @@ export const runLoop = async (
   logger.success("Pre-flight checks passed");
 
   let consecutiveEmptyCycles = 0;
+  let cycleCount = 0;
 
-  for (let i = 0; i < maxCycles; i++) {
+  while (cycleCount < maxCycles) {
     const result = await runCycle(cycleCtx);
+    cycleCount++;
 
-    onCycleComplete?.(result, i + 1);
+    onCycleComplete?.(result, cycleCount);
 
     if (result.status === "complete") {
+      if (waitForComments) {
+        // In wait mode, keep polling for new comments
+        logger.info(
+          `Waiting for new Bugbot comments... (${pollIntervalMs / 1000}s)`
+        );
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        // Don't count waiting cycles toward maxCycles
+        cycleCount--;
+        continue;
+      }
       logger.success("All comments resolved!");
       return result;
     }
@@ -217,7 +231,7 @@ export const runLoop = async (
     }
 
     // Wait before next cycle
-    if (i < maxCycles - 1) {
+    if (cycleCount < maxCycles) {
       logger.info(`Waiting ${pollIntervalMs / 1000}s before next cycle...`);
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }

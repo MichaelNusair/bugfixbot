@@ -15,6 +15,7 @@ export type WatchCommandOptions = {
   configPath?: string;
   maxCycles?: number;
   pollInterval?: number;
+  wait?: boolean;
 };
 
 export const watchCommand = async (
@@ -27,6 +28,7 @@ export const watchCommand = async (
     configPath,
     maxCycles,
     pollInterval,
+    wait = true,
   } = options;
 
   // Load config
@@ -89,6 +91,9 @@ export const watchCommand = async (
       (pollInterval ?? config.guardrails.pollIntervalMs) / 1000
     }s`
   );
+  if (!wait) {
+    logger.info("No-wait mode: will exit when no comments found");
+  }
   logger.info("");
 
   const ctx: LoopContext = {
@@ -103,6 +108,7 @@ export const watchCommand = async (
   const result = await runLoop(ctx, {
     maxCycles: maxCycles ?? config.guardrails.maxCycles,
     pollIntervalMs: pollInterval ?? config.guardrails.pollIntervalMs,
+    waitForComments: wait,
     onCycleComplete: (cycleResult, cycleNumber) => {
       logger.info(
         `--- Cycle ${cycleNumber} complete: ${cycleResult.status} ---`

@@ -58,6 +58,10 @@ const createCli = (): Command => {
     .option("-c, --config <path>", "Path to config file")
     .option("--max-cycles <number>", "Maximum cycles to run", parseInt)
     .option("--poll-interval <ms>", "Milliseconds between cycles", parseInt)
+    .option(
+      "--no-wait",
+      "Exit immediately when no comments found (default: keep polling)"
+    )
     .action(async (options) => {
       const result = await watchCommand(process.cwd(), {
         pr: options.pr,
@@ -65,6 +69,7 @@ const createCli = (): Command => {
         configPath: options.config,
         maxCycles: options.maxCycles,
         pollInterval: options.pollInterval,
+        wait: options.wait,
       });
 
       if (result.status === "failed") {
