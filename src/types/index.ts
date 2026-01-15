@@ -53,18 +53,27 @@ export type EngineResult = {
   error?: string;
 };
 
+export type ReviewerConfig = {
+  name: string;
+  checkPatterns: string[];
+  triggerComment?: string;
+  botAuthors: string[];
+};
+
 export type GitHubConfig = {
   repo?: string;
   pr?: number;
   auth: AuthMethod;
   token?: string;
   botAuthors: string[];
+  reviewers: ReviewerConfig[];
 };
 
 export type FixConfig = {
   engine: FixEngine;
   command?: string;
   instructions?: string;
+  model?: string;
 };
 
 export type VerificationConfig = {
@@ -109,4 +118,5 @@ export type PRComment = {
   createdAt: string;
   updatedAt: string;
   position: number | null;
+  hasReply: boolean;
 };

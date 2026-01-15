@@ -1,6 +1,6 @@
 import { exec } from "../utils/exec.js";
 import { logger } from "../utils/logger.js";
-import { buildPrompt } from "./prompt-builder.js";
+import { buildPromptWithRules } from "./prompt-builder.js";
 import type { FixEngine } from "./types.js";
 import type { FixTask, EngineResult, FixConfig } from "../types/index.js";
 
@@ -30,25 +30,35 @@ export const createCursorCliEngine = (
         return { success: true, filesChanged: [] };
       }
 
-      const prompt = buildPrompt({
-        tasks,
-        instructions: config.instructions,
-      });
+      const prompt = await buildPromptWithRules(
+        {
+          tasks,
+          instructions: config.instructions,
+        },
+        cwd
+      );
 
       logger.step(
         `Applying fixes for ${tasks.length} comment(s) via Cursor CLI...`
       );
       logger.debug("Prompt:", prompt);
 
+      // Build CLI arguments
+      const cliArgs = ["agent", "--print", "--workspace", cwd];
+      
+      // Add model if specified
+      if (config.model) {
+        cliArgs.push("--model", config.model);
+        logger.debug(`Using model: ${config.model}`);
+      }
+      
+      cliArgs.push(prompt);
+
       // Use cursor agent with --print for non-interactive mode
-      const result = await exec(
-        "cursor",
-        ["agent", "--print", "--workspace", cwd, prompt],
-        {
-          cwd,
-          timeout: 300000, // 5 minute timeout
-        }
-      );
+      const result = await exec("cursor", cliArgs, {
+        cwd,
+        timeout: 300000, // 5 minute timeout
+      });
 
       if (result.exitCode !== 0) {
         logger.error("Cursor CLI failed:", result.stderr);

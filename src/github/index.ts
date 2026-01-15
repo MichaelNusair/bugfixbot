@@ -10,6 +10,8 @@ export {
   fetchPRReviewComments,
   fetchIssueComments,
   fetchAllBugbotComments,
+  postPRComment,
+  replyToReviewComment,
   type FetchCommentsOptions,
 } from "./comments.js";
 
@@ -23,6 +25,9 @@ export {
 export {
   getBugbotCheckStatus,
   isBugbotStillReviewing,
+  getReviewerCheckStatus,
+  areAllReviewersComplete,
   type CheckStatus,
   type BugbotCheckResult,
+  type ReviewerCheckResult,
 } from "./checks.js";

@@ -15,6 +15,7 @@ export const createMockComment = (
   createdAt: "2026-01-15T10:00:00Z",
   updatedAt: "2026-01-15T10:00:00Z",
   position: 5,
+  hasReply: false,
   ...overrides,
 });
 

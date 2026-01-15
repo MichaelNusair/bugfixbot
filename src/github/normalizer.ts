@@ -95,7 +95,12 @@ export const normalizeComments = (
   const tasks: FixTask[] = [];
 
   for (const comment of comments) {
-    // Skip already handled comments
+    // Skip comments that already have replies (handled on GitHub)
+    if (comment.hasReply) {
+      continue;
+    }
+
+    // Skip already handled comments (handled in local state)
     if (isCommentHandled(comment, state)) {
       continue;
     }

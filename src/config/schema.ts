@@ -4,6 +4,13 @@ export const AuthMethodSchema = z.enum(["gh", "token", "env"]);
 
 export const FixEngineSchema = z.enum(["cursor-cli", "cursor-command"]);
 
+export const ReviewerConfigSchema = z.object({
+  name: z.string(),
+  checkPatterns: z.array(z.string()),
+  triggerComment: z.string().optional(),
+  botAuthors: z.array(z.string()),
+});
+
 export const GitHubConfigSchema = z.object({
   repo: z.string().optional(),
   pr: z.number().optional(),
@@ -12,12 +19,26 @@ export const GitHubConfigSchema = z.object({
   botAuthors: z
     .array(z.string())
     .default(["cursor-bot", "bugbot", "cursor[bot]"]),
+  reviewers: z.array(ReviewerConfigSchema).default([
+    {
+      name: "Cursor Bugbot",
+      checkPatterns: ["bugbot", "cursor.*review", "cursor.*bot"],
+      botAuthors: ["cursor-bot", "bugbot", "cursor[bot]"],
+    },
+    {
+      name: "Codex",
+      checkPatterns: ["codex"],
+      triggerComment: "@codex review",
+      botAuthors: ["codex", "codex[bot]"],
+    },
+  ]),
 });
 
 export const FixConfigSchema = z.object({
   engine: FixEngineSchema.default("cursor-cli"),
   command: z.string().optional(),
   instructions: z.string().optional(),
+  model: z.string().optional(),
 });
 
 export const VerificationConfigSchema = z.object({

@@ -1,9 +1,17 @@
 import type { Octokit } from "@octokit/rest";
 import { logger } from "../utils/logger.js";
+import type { ReviewerConfig } from "../types/index.js";
 
 export type CheckStatus = "pending" | "in_progress" | "completed" | "unknown";
 
 export type BugbotCheckResult = {
+  status: CheckStatus;
+  conclusion: string | null;
+  checkName: string | null;
+};
+
+export type ReviewerCheckResult = {
+  name: string;
   status: CheckStatus;
   conclusion: string | null;
   checkName: string | null;
@@ -15,6 +23,10 @@ const BUGBOT_CHECK_PATTERNS = [
   /cursor.*bot/i,
   /code.*review.*bot/i,
 ];
+
+const patternsToRegExp = (patterns: string[]): RegExp[] => {
+  return patterns.map((p) => new RegExp(p, "i"));
+};
 
 export const getBugbotCheckStatus = async (
   octokit: Octokit,
@@ -77,4 +89,73 @@ export const isBugbotStillReviewing = async (
 
   // Still reviewing if pending or in_progress
   return result.status === "pending" || result.status === "in_progress";
+};
+
+export const getReviewerCheckStatus = async (
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  ref: string,
+  reviewer: ReviewerConfig
+): Promise<ReviewerCheckResult> => {
+  try {
+    const { data } = await octokit.checks.listForRef({
+      owner,
+      repo,
+      ref,
+      per_page: 100,
+    });
+
+    const patterns = patternsToRegExp(reviewer.checkPatterns);
+
+    for (const check of data.check_runs) {
+      const isMatch = patterns.some((pattern) => pattern.test(check.name));
+
+      if (isMatch) {
+        logger.debug(
+          `Found ${reviewer.name} check: ${check.name} - ${check.status}`
+        );
+        return {
+          name: reviewer.name,
+          status: check.status as CheckStatus,
+          conclusion: check.conclusion,
+          checkName: check.name,
+        };
+      }
+    }
+
+    return {
+      name: reviewer.name,
+      status: "unknown",
+      conclusion: null,
+      checkName: null,
+    };
+  } catch (error) {
+    logger.debug(`Could not fetch ${reviewer.name} check status:`, error);
+    return {
+      name: reviewer.name,
+      status: "unknown",
+      conclusion: null,
+      checkName: null,
+    };
+  }
+};
+
+export const areAllReviewersComplete = async (
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  ref: string,
+  reviewers: ReviewerConfig[]
+): Promise<{ allComplete: boolean; pending: string[] }> => {
+  const results = await Promise.all(
+    reviewers.map((r) => getReviewerCheckStatus(octokit, owner, repo, ref, r))
+  );
+
+  const pending = results
+    .filter((r) => r.status === "pending" || r.status === "in_progress")
+    .map((r) => r.name);
+
+  // If status is "unknown", we consider it complete (check might not exist)
+  return { allComplete: pending.length === 0, pending };
 };

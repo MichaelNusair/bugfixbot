@@ -1,14 +1,29 @@
-import type { Config } from "../types/index.js";
+import type { Config, ReviewerConfig } from "../types/index.js";
 
 export const DEFAULT_BOT_AUTHORS = ["cursor-bot", "bugbot", "cursor[bot]"];
 
 export const DEFAULT_COMMIT_TEMPLATE =
   "chore(bugbot): fix review findings [cycle {cycle}]";
 
+export const DEFAULT_REVIEWERS: ReviewerConfig[] = [
+  {
+    name: "Cursor Bugbot",
+    checkPatterns: ["bugbot", "cursor.*review", "cursor.*bot"],
+    botAuthors: ["cursor-bot", "bugbot", "cursor[bot]"],
+  },
+  {
+    name: "Codex",
+    checkPatterns: ["codex"],
+    triggerComment: "@codex review",
+    botAuthors: ["codex", "codex[bot]"],
+  },
+];
+
 export const DEFAULT_CONFIG: Config = {
   github: {
     auth: "env",
     botAuthors: DEFAULT_BOT_AUTHORS,
+    reviewers: DEFAULT_REVIEWERS,
   },
   fix: {
     engine: "cursor-cli",

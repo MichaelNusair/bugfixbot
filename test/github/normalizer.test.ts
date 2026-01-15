@@ -51,6 +51,29 @@ describe('normalizeComments', () => {
     expect(tasks).toHaveLength(0);
   });
 
+  it('filters out comments that already have replies', () => {
+    const commentWithReply = createMockComment({
+      id: 200,
+      body: 'Fix this bug',
+      path: 'src/utils.ts',
+      line: 10,
+      hasReply: true,
+    });
+    const commentWithoutReply = createMockComment({
+      id: 201,
+      body: 'Fix this other bug',
+      path: 'src/utils.ts',
+      line: 20,
+      hasReply: false,
+    });
+
+    const state = createMockState();
+    const tasks = normalizeComments([commentWithReply, commentWithoutReply], state);
+
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].id).toBe(201);
+  });
+
   it('handles comments without a path as potentially actionable if they contain keywords', () => {
     const generalComment = createMockComment({
       id: 100,

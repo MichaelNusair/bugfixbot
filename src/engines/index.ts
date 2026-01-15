@@ -9,9 +9,11 @@ export {
 } from "./cursor-command.js";
 export {
   buildPrompt,
+  buildPromptWithRules,
   buildCompactPrompt,
   estimateTokens,
 } from "./prompt-builder.js";
+export { loadRulesContext, loadAllRulesContext } from "./rules-loader.js";
 export type { FixEngine, PromptContext } from "./types.js";
 
 export const createEngine = (

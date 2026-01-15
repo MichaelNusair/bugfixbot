@@ -1,5 +1,6 @@
 import type { FixTask } from '../types/index.js';
 import type { PromptContext } from './types.js';
+import { loadRulesContext } from './rules-loader.js';
 
 const formatTask = (task: FixTask, index: number): string => {
   const lines: string[] = [];
@@ -33,9 +34,17 @@ const DEFAULT_INSTRUCTIONS = `
 `.trim();
 
 export const buildPrompt = (context: PromptContext): string => {
-  const { tasks, instructions } = context;
+  const { tasks, instructions, rulesContext } = context;
 
   const lines: string[] = [];
+
+  // Include rules context if provided
+  if (rulesContext) {
+    lines.push(rulesContext);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
 
   lines.push('Apply the following fixes to the codebase:');
   lines.push('');
@@ -51,6 +60,15 @@ export const buildPrompt = (context: PromptContext): string => {
   lines.push(instructions ?? DEFAULT_INSTRUCTIONS);
 
   return lines.join('\n');
+};
+
+export const buildPromptWithRules = async (
+  context: PromptContext,
+  cwd: string
+): Promise<string> => {
+  const filePaths = context.tasks.map((t) => t.filePath).filter(Boolean);
+  const rulesContext = await loadRulesContext(cwd, filePaths);
+  return buildPrompt({ ...context, rulesContext });
 };
 
 export const buildCompactPrompt = (context: PromptContext): string => {

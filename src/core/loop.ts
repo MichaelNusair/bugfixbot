@@ -1,12 +1,16 @@
 import type { Octokit } from "@octokit/rest";
 import type { Config, CycleResult, FixTask } from "../types/index.js";
-import { fetchAllBugbotComments } from "../github/comments.js";
+import {
+  fetchAllBugbotComments,
+  postPRComment,
+  replyToReviewComment,
+} from "../github/comments.js";
 import {
   normalizeComments,
   countAffectedLines,
   groupTasksByFile,
 } from "../github/normalizer.js";
-import { isBugbotStillReviewing } from "../github/checks.js";
+import { areAllReviewersComplete } from "../github/checks.js";
 import { createEngine } from "../engines/index.js";
 import { runVerification } from "./verification.js";
 import { createGitManager, commitAndPush } from "./git.js";
@@ -61,16 +65,25 @@ export const runCycle = async (ctx: CycleContext): Promise<CycleResult> => {
 
   logger.info(`Starting cycle ${cycleNumber} for PR #${prNumber}`);
 
-  // 1. Fetch Bugbot comments
-  logger.step("Fetching Bugbot comments...");
+  // 1. Fetch comments from all reviewers
+  logger.step("Fetching reviewer comments...");
+
+  // Collect bot authors from all reviewers + legacy botAuthors config
+  const allBotAuthors = [
+    ...new Set([
+      ...config.github.botAuthors,
+      ...config.github.reviewers.flatMap((r) => r.botAuthors),
+    ]),
+  ];
+
   const comments = await fetchAllBugbotComments(octokit, {
     owner,
     repo,
     prNumber,
-    botAuthors: config.github.botAuthors,
+    botAuthors: allBotAuthors,
   });
 
-  logger.info(`Found ${comments.length} total Bugbot comment(s)`);
+  logger.info(`Found ${comments.length} total reviewer comment(s)`);
 
   // 2. Normalize to actionable fix tasks
   const tasks = normalizeComments(comments, state);
@@ -107,10 +120,38 @@ export const runCycle = async (ctx: CycleContext): Promise<CycleResult> => {
   }
 
   if (engineResult.filesChanged.length === 0) {
-    logger.warn("No files changed after applying fixes");
+    logger.info("No files changed - issues may already be fixed");
+
+    // Reply to comments acknowledging they were checked
+    logger.step("Replying to already-fixed comments...");
+    let repliedCount;
+    const replyPromises = tasks.map(async (task) => {
+      try {
+        await replyToReviewComment(
+          octokit,
+          owner,
+          repo,
+          prNumber,
+          task.commentId,
+          `Verified - this issue appears to be already addressed in the current code.`
+        );
+        repliedCount++;
+      } catch (error) {
+        // Not all comments support replies (e.g., issue comments)
+        logger.debug(`Could not reply to comment ${task.commentId}:`, error);
+      }
+    });
+    await Promise.all(replyPromises);
+    logger.info(`Successfully replied to ${repliedCount} comments`);
+
+    // Mark as handled so we don't process them again
+    stateStore.markHandled(tasks, "already-fixed");
+
+    logger.success(`Acknowledged ${tasks.length} already-fixed comment(s)`);
     return {
-      status: "stopped",
-      reason: "No changes generated",
+      status: "complete",
+      reason: "Issues already fixed, replies posted",
+      fixedCount: tasks.length,
     };
   }
 
@@ -130,7 +171,54 @@ export const runCycle = async (ctx: CycleContext): Promise<CycleResult> => {
   const gitManager = createGitManager({ cwd });
   const commitSha = await commitAndPush(gitManager, config.git, cycleNumber);
 
-  // 7. Mark tasks as handled
+  // 7. Reply in-thread to addressed comments
+  logger.step("Replying to addressed comments...");
+  const replyPromises = tasks.map(async (task) => {
+    try {
+      await replyToReviewComment(
+        octokit,
+        owner,
+        repo,
+        prNumber,
+        task.commentId,
+        `Fixed in ${commitSha.slice(0, 7)}`
+      );
+    } catch (error) {
+      // Not all comments support replies (e.g., issue comments)
+      logger.debug(`Could not reply to comment ${task.commentId}:`, error);
+    }
+  });
+  await Promise.all(replyPromises);
+
+  // 8. Post trigger comments for reviewers
+  for (const reviewer of config.github.reviewers) {
+    if (reviewer.triggerComment) {
+      logger.step(`Triggering ${reviewer.name}...`);
+      await postPRComment(
+        octokit,
+        owner,
+        repo,
+        prNumber,
+        reviewer.triggerComment
+      );
+    }
+  }
+
+  // 9. Post status comment with details
+  const filesChanged = engineResult.filesChanged;
+  const statusMessage = [
+    `**Bugfixbot Cycle ${cycleNumber} Complete**`,
+    ``,
+    `- Commit: \`${commitSha.slice(0, 7)}\``,
+    `- Comments addressed: ${tasks.length}`,
+    `- Files changed: ${filesChanged.length}`,
+    ``,
+    `Waiting for reviewers...`,
+  ].join("\n");
+
+  await postPRComment(octokit, owner, repo, prNumber, statusMessage);
+
+  // 10. Mark tasks as handled
   stateStore.markHandled(tasks, commitSha);
 
   logger.success(
@@ -163,6 +251,9 @@ export const runLoop = async (
     onCycleComplete,
   } = options;
 
+  const { backoffMultiplier } = config.guardrails;
+  const MAX_POLL_INTERVAL = 300000; // 5 minutes max
+
   const stateStore = createStateStore(cwd, prNumber);
   const cycleCtx: CycleContext = { ...ctx, stateStore };
 
@@ -191,6 +282,7 @@ export const runLoop = async (
 
   let consecutiveEmptyCycles = 0;
   let cycleCount = 0;
+  let currentPollInterval = pollIntervalMs;
 
   while (cycleCount < maxCycles) {
     const result = await runCycle(cycleCtx);
@@ -200,31 +292,53 @@ export const runLoop = async (
 
     if (result.status === "complete") {
       if (waitForComments) {
-        // Check if Bugbot is still reviewing
+        // Check if all reviewers are done
         const headSha = await gitManager.getHead();
-        const stillReviewing = await isBugbotStillReviewing(
+        const { allComplete, pending } = await areAllReviewersComplete(
           ctx.octokit,
           ctx.owner,
           ctx.repo,
-          headSha
+          headSha,
+          config.github.reviewers
         );
 
-        if (stillReviewing) {
-          // Bugbot still reviewing - keep polling
+        if (!allComplete) {
+          // Some reviewers still reviewing - keep polling with exponential backoff
           logger.info(
-            `Bugbot still reviewing, waiting... (${pollIntervalMs / 1000}s)`
+            `Waiting for: ${pending.join(", ")} (${currentPollInterval / 1000}s)`
           );
-          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+          await new Promise((resolve) =>
+            setTimeout(resolve, currentPollInterval)
+          );
+          // Apply exponential backoff, capped at MAX_POLL_INTERVAL
+          currentPollInterval = Math.min(
+            currentPollInterval * backoffMultiplier,
+            MAX_POLL_INTERVAL
+          );
           // Don't count waiting cycles toward maxCycles
           cycleCount--;
           continue;
         }
 
-        // Bugbot finished reviewing with 0 comments - done!
-        logger.success("Bugbot review complete - no issues found!");
+        // All reviewers finished with 0 comments - done!
+        logger.success("All reviews complete - no issues found!");
+        await postPRComment(
+          ctx.octokit,
+          ctx.owner,
+          ctx.repo,
+          prNumber,
+          `✅ Bugfixbot complete! All review comments have been addressed across ${cycleCount} cycle(s).`
+        );
         return result;
       }
       logger.success("All comments resolved!");
+      await postPRComment(
+        ctx.octokit,
+        ctx.owner,
+        ctx.repo,
+        prNumber,
+        `✅ Bugfixbot complete! All review comments have been addressed across ${cycleCount} cycle(s).`
+      );
       return result;
     }
 
@@ -244,12 +358,21 @@ export const runLoop = async (
       }
     } else {
       consecutiveEmptyCycles = 0;
+      // Reset backoff after successful progress
+      currentPollInterval = pollIntervalMs;
     }
 
-    // Wait before next cycle
+    // Wait before next cycle (using current backoff interval)
     if (cycleCount < maxCycles) {
-      logger.info(`Waiting ${pollIntervalMs / 1000}s before next cycle...`);
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      logger.info(
+        `Waiting ${currentPollInterval / 1000}s before next cycle...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, currentPollInterval));
+      // Apply backoff for next wait
+      currentPollInterval = Math.min(
+        currentPollInterval * backoffMultiplier,
+        MAX_POLL_INTERVAL
+      );
     }
   }
 

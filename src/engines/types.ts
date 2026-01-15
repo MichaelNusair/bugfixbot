@@ -9,4 +9,5 @@ export type PromptContext = {
   tasks: FixTask[];
   instructions?: string;
   maxTokens?: number;
+  rulesContext?: string;
 };
