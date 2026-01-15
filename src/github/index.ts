@@ -4,18 +4,25 @@ export {
   inferRepoFromGit,
   inferPrFromBranch,
   type GitHubClientOptions,
-} from './client.js';
+} from "./client.js";
 
 export {
   fetchPRReviewComments,
   fetchIssueComments,
   fetchAllBugbotComments,
   type FetchCommentsOptions,
-} from './comments.js';
+} from "./comments.js";
 
 export {
   normalizeComments,
   groupTasksByFile,
   countAffectedLines,
   createCommentKey,
-} from './normalizer.js';
+} from "./normalizer.js";
+
+export {
+  getBugbotCheckStatus,
+  isBugbotStillReviewing,
+  type CheckStatus,
+  type BugbotCheckResult,
+} from "./checks.js";

@@ -6,6 +6,7 @@ import {
   countAffectedLines,
   groupTasksByFile,
 } from "../github/normalizer.js";
+import { isBugbotStillReviewing } from "../github/checks.js";
 import { createEngine } from "../engines/index.js";
 import { runVerification } from "./verification.js";
 import { createGitManager, commitAndPush } from "./git.js";
@@ -199,14 +200,29 @@ export const runLoop = async (
 
     if (result.status === "complete") {
       if (waitForComments) {
-        // In wait mode, keep polling for new comments
-        logger.info(
-          `Waiting for new Bugbot comments... (${pollIntervalMs / 1000}s)`
+        // Check if Bugbot is still reviewing
+        const headSha = await gitManager.getHead();
+        const stillReviewing = await isBugbotStillReviewing(
+          ctx.octokit,
+          ctx.owner,
+          ctx.repo,
+          headSha
         );
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-        // Don't count waiting cycles toward maxCycles
-        cycleCount--;
-        continue;
+
+        if (stillReviewing) {
+          // Bugbot still reviewing - keep polling
+          logger.info(
+            `Bugbot still reviewing, waiting... (${pollIntervalMs / 1000}s)`
+          );
+          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+          // Don't count waiting cycles toward maxCycles
+          cycleCount--;
+          continue;
+        }
+
+        // Bugbot finished reviewing with 0 comments - done!
+        logger.success("Bugbot review complete - no issues found!");
+        return result;
       }
       logger.success("All comments resolved!");
       return result;
