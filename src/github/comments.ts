@@ -118,11 +118,17 @@ export const fetchAllBugbotComments = async (
 
   // Mark resolved comments and filter them out
   const allComments = [...reviewComments, ...issueComments];
+  let resolvedCount = 0;
 
   for (const comment of allComments) {
     if (resolvedIds.has(comment.id)) {
       comment.isResolved = true;
+      resolvedCount++;
     }
+  }
+
+  if (resolvedCount > 0) {
+    logger.info(`Skipping ${resolvedCount} already-resolved comment(s)`);
   }
 
   // Filter out resolved comments and sort by creation date, oldest first
@@ -229,8 +235,12 @@ export const fetchResolvedCommentIds = async (
         resolvedIds.add(firstComment.databaseId);
       }
     }
+
+    if (resolvedIds.size > 0) {
+      logger.debug(`Found ${resolvedIds.size} resolved comment thread(s)`);
+    }
   } catch (error) {
-    logger.debug("Failed to fetch resolved comment IDs:", error);
+    logger.warn("Failed to fetch resolved comment IDs via GraphQL:", error);
   }
 
   return resolvedIds;

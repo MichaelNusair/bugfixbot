@@ -241,7 +241,35 @@ export const runLoop = async (
       return result;
     }
 
-    if (result.status === "failed" || result.status === "stopped") {
+    if (result.status === "failed") {
+      return result;
+    }
+
+    // On "stopped" (no changes generated), check if Bugbot might have new comments
+    if (result.status === "stopped" && waitForComments) {
+      const headSha = await gitManager.getHead();
+      const stillReviewing = await isBugbotStillReviewing(
+        ctx.octokit,
+        ctx.owner,
+        ctx.repo,
+        headSha
+      );
+
+      if (stillReviewing) {
+        // Bugbot still reviewing - wait and retry
+        logger.info(
+          `Bugbot still reviewing, waiting... (${pollIntervalMs / 1000}s)`
+        );
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        cycleCount--;
+        continue;
+      }
+
+      // Bugbot finished but we couldn't make changes - stop
+      return result;
+    }
+
+    if (result.status === "stopped") {
       return result;
     }
 
