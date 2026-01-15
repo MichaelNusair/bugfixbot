@@ -1,0 +1,38 @@
+# Bugfixbot Configuration
+# https://github.com/MichaelNusair/bugfixbot
+
+github:
+  # repo: owner/repo  # Optional: inferred from git remote
+  # pr: 123           # Optional: inferred from current branch
+  auth: env           # 'gh' (use gh CLI), 'token', or 'env' (GITHUB_TOKEN)
+  botAuthors:
+    - cursor-bot
+    - bugbot
+    - cursor[bot]
+
+fix:
+  engine: cursor-cli  # 'cursor-cli' or 'cursor-command'
+  # command: bugbot_fix  # .cursor/commands/ name (for cursor-command engine)
+  # instructions: |
+  #   Additional context for fixes...
+
+verification:
+  commands:
+    - npm run typecheck
+    - npm run lint
+    - npm test
+  timeout: 300000     # 5 minutes per command
+  stopOnFailure: true
+
+guardrails:
+  maxCycles: 5
+  maxFilesPerCycle: 10
+  maxLinesPerCycle: 500
+  requireApprovalAbove: 200  # lines changed
+  pollIntervalMs: 30000      # 30 seconds
+  backoffMultiplier: 1.5
+
+git:
+  commitTemplate: "chore(bugbot): fix review findings [cycle {cycle}]"
+  autoRebase: false
+  pushForce: false
