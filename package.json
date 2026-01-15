@@ -1,6 +1,6 @@
 {
   "name": "@tenxtools/bugfixbot",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Local-first PR review autopilot for Cursor Bugbot - watches GitHub PR comments, applies fixes via Cursor CLI, and commits in cycles",
   "type": "module",
   "main": "./dist/index.js",
