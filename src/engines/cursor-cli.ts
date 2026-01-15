@@ -1,12 +1,8 @@
-import { existsSync } from "node:fs";
 import { exec } from "../utils/exec.js";
 import { logger } from "../utils/logger.js";
 import { buildPrompt } from "./prompt-builder.js";
 import type { FixEngine } from "./types.js";
 import type { FixTask, EngineResult, FixConfig } from "../types/index.js";
-
-// macOS Cursor Electron binary path - bypasses wrapper script's eval
-const CURSOR_ELECTRON_PATH = "/Applications/Cursor.app/Contents/MacOS/Cursor";
 
 const detectChangedFiles = async (cwd: string): Promise<string[]> => {
   const result = await exec("git", ["diff", "--name-only"], { cwd });
@@ -18,15 +14,6 @@ const detectChangedFiles = async (cwd: string): Promise<string[]> => {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-};
-
-const getCursorBinary = (): string => {
-  // Use direct Electron binary path if available (bypasses wrapper's eval)
-  if (existsSync(CURSOR_ELECTRON_PATH)) {
-    return CURSOR_ELECTRON_PATH;
-  }
-  // Fall back to wrapper (may have issues with special characters)
-  return "cursor";
 };
 
 export const createCursorCliEngine = (
@@ -53,16 +40,15 @@ export const createCursorCliEngine = (
       );
       logger.debug("Prompt:", prompt);
 
-      // Cursor CLI invocation
-      // The --message flag sends the prompt to Cursor's AI
-      // We call the Electron binary directly to bypass wrapper's eval
-      const cursorBinary = getCursorBinary();
-      logger.debug("Using Cursor binary:", cursorBinary);
-
-      const result = await exec(cursorBinary, ["--message", prompt], {
-        cwd,
-        timeout: 300000, // 5 minute timeout
-      });
+      // Use cursor agent with --print for non-interactive mode
+      const result = await exec(
+        "cursor",
+        ["agent", "--print", "--workspace", cwd, prompt],
+        {
+          cwd,
+          timeout: 300000, // 5 minute timeout
+        }
+      );
 
       if (result.exitCode !== 0) {
         logger.error("Cursor CLI failed:", result.stderr);

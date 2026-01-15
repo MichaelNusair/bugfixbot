@@ -8,18 +8,6 @@ import type { FixTask, EngineResult, FixConfig } from "../types/index.js";
 
 const CURSOR_COMMANDS_DIR = ".cursor/commands";
 
-// macOS Cursor Electron binary path - bypasses wrapper script's eval
-const CURSOR_ELECTRON_PATH = "/Applications/Cursor.app/Contents/MacOS/Cursor";
-
-const getCursorBinary = (): string => {
-  // Use direct Electron binary path if available (bypasses wrapper's eval)
-  if (existsSync(CURSOR_ELECTRON_PATH)) {
-    return CURSOR_ELECTRON_PATH;
-  }
-  // Fall back to wrapper (may have issues with special characters)
-  return "cursor";
-};
-
 const detectChangedFiles = async (cwd: string): Promise<string[]> => {
   const result = await exec("git", ["diff", "--name-only"], { cwd });
   if (result.exitCode !== 0) {
@@ -111,14 +99,10 @@ export const createCursorCommandEngine = (
       );
       logger.debug("Interpolated command:", interpolatedCommand);
 
-      // Execute via Cursor CLI with the interpolated command content
-      // We call the Electron binary directly to bypass wrapper's eval
-      const cursorBinary = getCursorBinary();
-      logger.debug("Using Cursor binary:", cursorBinary);
-
+      // Use cursor agent with --print for non-interactive mode
       const result = await exec(
-        cursorBinary,
-        ["--message", interpolatedCommand],
+        "cursor",
+        ["agent", "--print", "--workspace", cwd, interpolatedCommand],
         {
           cwd,
           timeout: 300000,
