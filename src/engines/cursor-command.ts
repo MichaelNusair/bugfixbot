@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { exec } from "../utils/exec.js";
+import { exec, execShell, shellEscape } from "../utils/exec.js";
 import { logger } from "../utils/logger.js";
 import { buildPrompt } from "./prompt-builder.js";
 import type { FixEngine } from "./types.js";
@@ -100,7 +100,9 @@ export const createCursorCommandEngine = (
       logger.debug("Interpolated command:", interpolatedCommand);
 
       // Execute via Cursor CLI with the interpolated command content
-      const result = await exec("cursor", ["--message", interpolatedCommand], {
+      // We use execShell with escaped content because cursor wrapper uses eval
+      const escapedCommand = shellEscape(interpolatedCommand);
+      const result = await execShell(`cursor --message ${escapedCommand}`, {
         cwd,
         timeout: 300000,
       });

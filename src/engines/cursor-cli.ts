@@ -1,4 +1,4 @@
-import { exec } from "../utils/exec.js";
+import { exec, execShell, shellEscape } from "../utils/exec.js";
 import { logger } from "../utils/logger.js";
 import { buildPrompt } from "./prompt-builder.js";
 import type { FixEngine } from "./types.js";
@@ -42,7 +42,9 @@ export const createCursorCliEngine = (
 
       // Cursor CLI invocation
       // The --message flag sends the prompt to Cursor's AI
-      const result = await exec("cursor", ["--message", prompt], {
+      // We use execShell with escaped prompt because cursor wrapper uses eval
+      const escapedPrompt = shellEscape(prompt);
+      const result = await execShell(`cursor --message ${escapedPrompt}`, {
         cwd,
         timeout: 300000, // 5 minute timeout
       });

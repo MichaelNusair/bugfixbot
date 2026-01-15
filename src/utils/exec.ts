@@ -1,5 +1,15 @@
 import { spawn } from "node:child_process";
 
+/**
+ * Escape a string for safe use in shell commands.
+ * Uses single quotes and escapes any embedded single quotes.
+ */
+export const shellEscape = (str: string): string => {
+  // Wrap in single quotes, replacing any single quotes with: '\''
+  // This ends the single quote, adds an escaped single quote, and restarts single quote
+  return `'${str.replace(/'/g, "'\\''")}'`;
+};
+
 export type ExecResult = {
   exitCode: number;
   stdout: string;
