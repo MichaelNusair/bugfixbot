@@ -1,12 +1,24 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { exec, execShell, shellEscape } from "../utils/exec.js";
+import { exec } from "../utils/exec.js";
 import { logger } from "../utils/logger.js";
 import { buildPrompt } from "./prompt-builder.js";
 import type { FixEngine } from "./types.js";
 import type { FixTask, EngineResult, FixConfig } from "../types/index.js";
 
 const CURSOR_COMMANDS_DIR = ".cursor/commands";
+
+// macOS Cursor Electron binary path - bypasses wrapper script's eval
+const CURSOR_ELECTRON_PATH = "/Applications/Cursor.app/Contents/MacOS/Cursor";
+
+const getCursorBinary = (): string => {
+  // Use direct Electron binary path if available (bypasses wrapper's eval)
+  if (existsSync(CURSOR_ELECTRON_PATH)) {
+    return CURSOR_ELECTRON_PATH;
+  }
+  // Fall back to wrapper (may have issues with special characters)
+  return "cursor";
+};
 
 const detectChangedFiles = async (cwd: string): Promise<string[]> => {
   const result = await exec("git", ["diff", "--name-only"], { cwd });
@@ -100,12 +112,18 @@ export const createCursorCommandEngine = (
       logger.debug("Interpolated command:", interpolatedCommand);
 
       // Execute via Cursor CLI with the interpolated command content
-      // We use execShell with escaped content because cursor wrapper uses eval
-      const escapedCommand = shellEscape(interpolatedCommand);
-      const result = await execShell(`cursor --message ${escapedCommand}`, {
-        cwd,
-        timeout: 300000,
-      });
+      // We call the Electron binary directly to bypass wrapper's eval
+      const cursorBinary = getCursorBinary();
+      logger.debug("Using Cursor binary:", cursorBinary);
+
+      const result = await exec(
+        cursorBinary,
+        ["--message", interpolatedCommand],
+        {
+          cwd,
+          timeout: 300000,
+        }
+      );
 
       if (result.exitCode !== 0) {
         logger.error("Cursor command failed:", result.stderr);
