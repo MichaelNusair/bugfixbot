@@ -10,6 +10,7 @@ export {
   fetchPRReviewComments,
   fetchIssueComments,
   fetchAllBugbotComments,
+  resolveReviewThreads,
   type FetchCommentsOptions,
 } from "./comments.js";
 

@@ -115,6 +115,7 @@ export const normalizeComments = (
     tasks.push({
       id: comment.id,
       commentId: comment.id,
+      nodeId: comment.nodeId,
       filePath: comment.path ?? "",
       lineStart: lineRange.start,
       lineEnd: lineRange.end,

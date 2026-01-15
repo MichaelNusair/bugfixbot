@@ -1,6 +1,9 @@
 import type { Octokit } from "@octokit/rest";
 import type { Config, CycleResult, FixTask } from "../types/index.js";
-import { fetchAllBugbotComments } from "../github/comments.js";
+import {
+  fetchAllBugbotComments,
+  resolveReviewThreads,
+} from "../github/comments.js";
 import {
   normalizeComments,
   countAffectedLines,
@@ -133,6 +136,16 @@ export const runCycle = async (ctx: CycleContext): Promise<CycleResult> => {
   // 7. Mark tasks as handled
   stateStore.markHandled(tasks, commitSha);
 
+  // 8. Resolve review threads on GitHub
+  logger.step("Resolving review threads...");
+  const resolveResult = await resolveReviewThreads(octokit, tasks);
+  if (resolveResult.resolved > 0) {
+    logger.success(`Resolved ${resolveResult.resolved} review thread(s)`);
+  }
+  if (resolveResult.failed > 0) {
+    logger.warn(`Failed to resolve ${resolveResult.failed} thread(s)`);
+  }
+
   logger.success(
     `Cycle ${cycleNumber} complete - pushed ${commitSha.slice(0, 7)}`
   );
@@ -230,6 +243,44 @@ export const runLoop = async (
 
     if (result.status === "failed" || result.status === "stopped") {
       return result;
+    }
+
+    // After a successful push, wait for Bugbot to re-review
+    if (result.status === "pushed" && waitForComments) {
+      logger.info(
+        `Waiting for Bugbot to review new changes... (${
+          pollIntervalMs / 1000
+        }s)`
+      );
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+
+      // Check if Bugbot is still reviewing
+      const headSha = await gitManager.getHead();
+      let stillReviewing = await isBugbotStillReviewing(
+        ctx.octokit,
+        ctx.owner,
+        ctx.repo,
+        headSha
+      );
+
+      // Keep waiting while Bugbot is reviewing
+      while (stillReviewing) {
+        logger.info(
+          `Bugbot still reviewing, waiting... (${pollIntervalMs / 1000}s)`
+        );
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        stillReviewing = await isBugbotStillReviewing(
+          ctx.octokit,
+          ctx.owner,
+          ctx.repo,
+          headSha
+        );
+      }
+
+      // Bugbot finished - don't count this waiting toward maxCycles
+      cycleCount--;
+      consecutiveEmptyCycles = 0;
+      continue;
     }
 
     // Check for no-progress loops

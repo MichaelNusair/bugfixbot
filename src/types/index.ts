@@ -7,6 +7,7 @@ export type CycleStatus = "complete" | "pushed" | "failed" | "stopped";
 export type FixTask = {
   id: number;
   commentId: number;
+  nodeId: string;
   filePath: string;
   lineStart: number;
   lineEnd: number;
@@ -98,6 +99,7 @@ export type Config = {
 
 export type PRComment = {
   id: number;
+  nodeId: string;
   userId: number;
   userLogin: string;
   body: string;
@@ -109,4 +111,5 @@ export type PRComment = {
   createdAt: string;
   updatedAt: string;
   position: number | null;
+  isResolved: boolean;
 };
