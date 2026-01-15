@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn } from "node:child_process";
 
 export type ExecResult = {
   exitCode: number;
@@ -25,33 +25,33 @@ export const exec = async (
     const child = spawn(command, args, {
       cwd,
       env: { ...process.env, ...env },
-      shell: true,
-      stdio: ['inherit', 'pipe', 'pipe'],
+      shell: false,
+      stdio: ["inherit", "pipe", "pipe"],
     });
 
-    let stdout = '';
-    let stderr = '';
+    let stdout = "";
+    let stderr = "";
     let killed = false;
 
     const timeoutId = setTimeout(() => {
       killed = true;
-      child.kill('SIGTERM');
+      child.kill("SIGTERM");
     }, timeout);
 
-    child.stdout?.on('data', (data: Buffer) => {
+    child.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    child.stderr?.on('data', (data: Buffer) => {
+    child.stderr?.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
-    child.on('error', (error) => {
+    child.on("error", (error) => {
       clearTimeout(timeoutId);
       reject(error);
     });
 
-    child.on('close', (code) => {
+    child.on("close", (code) => {
       clearTimeout(timeoutId);
       const durationMs = Date.now() - startTime;
 
@@ -59,7 +59,7 @@ export const exec = async (
         resolve({
           exitCode: 124,
           stdout,
-          stderr: stderr + '\nProcess timed out',
+          stderr: stderr + "\nProcess timed out",
           durationMs,
         });
       } else {
@@ -86,32 +86,32 @@ export const execShell = async (
       cwd,
       env: { ...process.env, ...env },
       shell: true,
-      stdio: ['inherit', 'pipe', 'pipe'],
+      stdio: ["inherit", "pipe", "pipe"],
     });
 
-    let stdout = '';
-    let stderr = '';
+    let stdout = "";
+    let stderr = "";
     let killed = false;
 
     const timeoutId = setTimeout(() => {
       killed = true;
-      child.kill('SIGTERM');
+      child.kill("SIGTERM");
     }, timeout);
 
-    child.stdout?.on('data', (data: Buffer) => {
+    child.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    child.stderr?.on('data', (data: Buffer) => {
+    child.stderr?.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
-    child.on('error', (error) => {
+    child.on("error", (error) => {
       clearTimeout(timeoutId);
       reject(error);
     });
 
-    child.on('close', (code) => {
+    child.on("close", (code) => {
       clearTimeout(timeoutId);
       const durationMs = Date.now() - startTime;
 
@@ -119,7 +119,7 @@ export const execShell = async (
         resolve({
           exitCode: 124,
           stdout,
-          stderr: stderr + '\nProcess timed out',
+          stderr: stderr + "\nProcess timed out",
           durationMs,
         });
       } else {
